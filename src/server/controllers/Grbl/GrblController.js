@@ -1,13 +1,15 @@
 import {
   ensureArray,
+  ensureFiniteNumber,
   ensureString,
 } from 'ensure-type';
 import * as parser from 'gcode-parser';
 import _ from 'lodash';
-import SerialConnection from '../../lib/SerialConnection';
+import AutoLeveling from '../../lib/AutoLeveling';
 import EventTrigger from '../../lib/EventTrigger';
 import Feeder from '../../lib/Feeder';
 import Sender, { SP_TYPE_CHAR_COUNTING } from '../../lib/Sender';
+import SerialConnection from '../../lib/SerialConnection';
 import Workflow, {
   WORKFLOW_STATE_IDLE,
   WORKFLOW_STATE_PAUSED,
@@ -15,6 +17,7 @@ import Workflow, {
 } from '../../lib/Workflow';
 import delay from '../../lib/delay';
 import ensurePositiveNumber from '../../lib/ensure-positive-number';
+import x from '../../lib/json-stringify';
 import evaluateAssignmentExpression from '../../lib/evaluate-assignment-expression';
 import logger from '../../lib/logger';
 import translateExpression from '../../lib/translate-expression';
@@ -118,6 +121,9 @@ class GrblController {
     // Event Trigger
     event = null;
 
+    // Auto Leveling
+    autoLeveling = null;
+
     // Feeder
     feeder = null;
 
@@ -178,6 +184,9 @@ class GrblController {
           return data;
         }
       });
+
+      // AutoLeveling
+      this.autoLeveling = new AutoLeveling();
 
       // Event Trigger
       this.event = new EventTrigger((event, trigger, commands) => {
@@ -553,6 +562,54 @@ class GrblController {
 
       this.runner.on('parameters', (res) => {
         this.emit('serialport:read', res.raw);
+
+        const { name, value } = res;
+
+        if (name === 'PRB') {
+          // Machine position
+          const {
+            x: mposx,
+            y: mposy,
+            z: mposz,
+            a: mposa,
+            b: mposb,
+            c: mposc,
+          } = this.runner.getMachinePosition();
+
+          // Work position
+          const {
+            x: posx,
+            y: posy,
+            z: posz,
+            a: posa,
+            b: posb,
+            c: posc,
+          } = this.runner.getWorkPosition();
+
+          const wco = {
+            x: (Number(mposx) - Number(posx)).toFixed(3),
+            y: (Number(mposy) - Number(posy)).toFixed(3),
+            z: (Number(mposz) - Number(posz)).toFixed(3),
+            a: (Number(mposa) - Number(posa)).toFixed(3),
+            b: (Number(mposb) - Number(posb)).toFixed(3),
+            c: (Number(mposc) - Number(posc)).toFixed(3),
+          };
+
+          // [PRB:0.000,0.000,0.000:0]
+          // The `PRB:` probe parameter message includes an additional `:` and suffix value is a boolean.
+          // It denotes whether the last probe cycle was successful or not.
+          if (value.result === 1) {
+            const probedPos = {
+              x: ensureFiniteNumber(value.x) - Number(wco.x),
+              y: ensureFiniteNumber(value.y) - Number(wco.y),
+              z: ensureFiniteNumber(value.z) - Number(wco.z),
+              a: ensureFiniteNumber(value.a) - Number(wco.a),
+              b: ensureFiniteNumber(value.b) - Number(wco.b),
+              c: ensureFiniteNumber(value.c) - Number(wco.c),
+            };
+            this.autoLeveling.emit('probe_update', { pos: probedPos });
+          }
+        }
       });
 
       this.runner.on('feedback', (res) => {
@@ -1384,7 +1441,22 @@ class GrblController {
 
             this.command('gcode:load', file, data, context, callback);
           });
-        }
+        },
+        'autoleveling': () => {
+          const [params] = args[0];
+          const { startX, endX, stepX, startY, endY, stepY, startZ, endZ } = params;
+          const positions = this.autoLeveling.getProbeXYPositions({
+            startX,
+            endX,
+            stepX,
+            startY,
+            endY,
+            stepY,
+          });
+          const probeGCodes = this.autoLeveling.start({ positions, startZ, endZ });
+          log.info(`[autoleveling] probeGCodes=${x(probeGCodes)}`);
+          this.command('gcode', probeGCodes);
+        },
       }[cmd];
 
       if (!handler) {
