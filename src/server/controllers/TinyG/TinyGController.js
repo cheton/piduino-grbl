@@ -31,7 +31,6 @@ import {
   BUILTIN_COMMAND_MSG,
   BUILTIN_COMMAND_WAIT,
   // M6 Tool Change
-  TOOL_CHANGE_POLICY_SEND_M6_COMMANDS,
   TOOL_CHANGE_POLICY_IGNORE_M6_COMMANDS,
   TOOL_CHANGE_POLICY_MANUAL_TOOL_CHANGE_WCS,
   TOOL_CHANGE_POLICY_MANUAL_TOOL_CHANGE_TLO,
@@ -303,9 +302,7 @@ class TinyGController {
               TOOL_CHANGE_POLICY_MANUAL_TOOL_CHANGE_CUSTOM_PROBING,
             ].includes(toolChangePolicy);
 
-            if (toolChangePolicy === TOOL_CHANGE_POLICY_SEND_M6_COMMANDS) {
-              // Send M6 commands
-            } else if (toolChangePolicy === TOOL_CHANGE_POLICY_IGNORE_M6_COMMANDS) {
+            if (toolChangePolicy === TOOL_CHANGE_POLICY_IGNORE_M6_COMMANDS) {
               // Ignore M6 commands
               line = replaceM6(line, (x) => `(${x})`); // replace with parentheses
 
@@ -439,9 +436,7 @@ class TinyGController {
               TOOL_CHANGE_POLICY_MANUAL_TOOL_CHANGE_CUSTOM_PROBING,
             ].includes(toolChangePolicy);
 
-            if (toolChangePolicy === TOOL_CHANGE_POLICY_SEND_M6_COMMANDS) {
-              // Send M6 commands
-            } else if (toolChangePolicy === TOOL_CHANGE_POLICY_IGNORE_M6_COMMANDS) {
+            if (toolChangePolicy === TOOL_CHANGE_POLICY_IGNORE_M6_COMMANDS) {
               // Ignore M6 commands
               line = replaceM6(line, (x) => `(${x})`); // replace with parentheses
 
